@@ -19,6 +19,31 @@ function subjectFrom(request) {
   return SUBJECTS.includes(id) ? id : null
 }
 
+// Blob stores are created as either private or public, and calls must use
+// the matching access. Until one succeeds with a real result, try private
+// and then public, then remember whichever the store accepted.
+let storeAccess = null
+
+async function withAccess(fn) {
+  if (storeAccess) return fn(storeAccess)
+  let firstError = null
+  let found = false
+  for (const access of ['private', 'public']) {
+    try {
+      const result = await fn(access)
+      if (result) {
+        storeAccess = access
+        return result
+      }
+      found = true // reachable, just nothing saved yet
+    } catch (err) {
+      firstError ??= err
+    }
+  }
+  if (!found) throw firstError
+  return null
+}
+
 function notConfigured() {
   return !process.env.BLOB_READ_WRITE_TOKEN
 }
@@ -28,7 +53,9 @@ export async function GET(request) {
   const id = subjectFrom(request)
   if (!id) return json({ error: 'unknown subject' }, 400)
 
-  const result = await get(`lesson-tracker/${id}.json`, { access: 'private', useCache: false })
+  const result = await withAccess((access) =>
+    get(`lesson-tracker/${id}.json`, { access, useCache: false })
+  )
   if (!result || result.statusCode !== 200) return json(null)
   return json(await new Response(result.stream).json())
 }
@@ -45,11 +72,13 @@ export async function PUT(request) {
     dailyGoal: s.dailyGoal == null ? null : Number(s.dailyGoal),
     lastSyncedLogTotal: Number(s.lastSyncedLogTotal) || 0,
   }
-  await put(`lesson-tracker/${id}.json`, JSON.stringify(state), {
-    access: 'private',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    contentType: 'application/json',
-  })
+  await withAccess((access) =>
+    put(`lesson-tracker/${id}.json`, JSON.stringify(state), {
+      access,
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: 'application/json',
+    })
+  )
   return json(state)
 }
