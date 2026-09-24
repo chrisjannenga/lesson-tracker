@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
-import { fetchRemote, pushRemote, subscribeRemote, supabase } from './sync'
+import { fetchRemote, NotConfigured, pushRemote } from './sync'
 
 // ---- Edit these two lines any time the month or dates change ----
 const START_DATE = new Date(2026, 8, 24) // Sept 24, 2026
@@ -82,23 +82,35 @@ function initialSubjectState(storeKey, defaultRemaining, today) {
   return initial
 }
 
-const SYNC_RETRY_MS = 30000
+const SYNC_POLL_MS = 15000
 const PUSH_DEBOUNCE_MS = 400
 
 function useSubjectState(id, defaultRemaining, today) {
   const storeKey = `ixlTracker_${id}_v1`
   const [state, setState] = useState(() => initialSubjectState(storeKey, defaultRemaining, today))
-  const [syncStatus, setSyncStatus] = useState(supabase ? 'syncing' : 'local')
+  const [syncStatus, setSyncStatus] = useState('syncing')
 
   // stateRef mirrors the latest state for async callbacks. dirtyRef is true
   // while this device has changes the server hasn't confirmed yet; while it's
-  // set, local changes win over whatever the server sends.
+  // set, local changes win over whatever the server sends. enabledRef goes
+  // false if there's no shared storage, leaving localStorage only.
   const stateRef = useRef(state)
   const dirtyRef = useRef(false)
   const readyRef = useRef(false)
+  const enabledRef = useRef(true)
+  const versionRef = useRef(0)
   const pushTimer = useRef(null)
 
   stateRef.current = state
+
+  function handleSyncError(err) {
+    if (err instanceof NotConfigured) {
+      enabledRef.current = false
+      setSyncStatus('local')
+    } else {
+      setSyncStatus('offline')
+    }
+  }
 
   function applyRemote(remote) {
     if (dirtyRef.current) return
@@ -113,19 +125,22 @@ function useSubjectState(id, defaultRemaining, today) {
       if (stateRef.current === sent) dirtyRef.current = false
       readyRef.current = true
       setSyncStatus('synced')
-    } catch {
-      setSyncStatus('offline')
+    } catch (err) {
+      handleSyncError(err)
     }
   }
 
   // Reconcile with the server: send pending local changes, otherwise take
   // the server's copy (or seed it from this device if it has none yet).
   async function sync() {
-    if (!supabase) return
+    if (!enabledRef.current) return
     if (dirtyRef.current) return push()
+    const version = versionRef.current
     try {
       const remote = await fetchRemote(id)
-      // A tap may have landed while the fetch was in flight; if so, push it.
+      // A tap may have landed while the fetch was in flight. If it's still
+      // unsent, push it; if it was already sent, this copy is stale - skip it.
+      if (versionRef.current !== version && !dirtyRef.current) return
       if (remote && !dirtyRef.current) {
         applyRemote(remote)
         readyRef.current = true
@@ -133,28 +148,25 @@ function useSubjectState(id, defaultRemaining, today) {
       } else {
         await push()
       }
-    } catch {
-      setSyncStatus('offline')
+    } catch (err) {
+      handleSyncError(err)
     }
   }
 
   useEffect(() => {
-    if (!supabase) return
     sync()
-    const unsubscribe = subscribeRemote(id, applyRemote)
     const onVisible = () => {
       if (document.visibilityState === 'visible') sync()
     }
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('online', sync)
     window.addEventListener('focus', sync)
-    const retry = setInterval(sync, SYNC_RETRY_MS)
+    const poll = setInterval(sync, SYNC_POLL_MS)
     return () => {
-      unsubscribe()
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('online', sync)
       window.removeEventListener('focus', sync)
-      clearInterval(retry)
+      clearInterval(poll)
       if (pushTimer.current) clearTimeout(pushTimer.current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -164,7 +176,7 @@ function useSubjectState(id, defaultRemaining, today) {
     saveState(storeKey, state)
     // Hold off until the first sync so a stale local copy can't clobber the
     // server; sync() will push anything still dirty once it connects.
-    if (!supabase || !dirtyRef.current || !readyRef.current) return
+    if (!enabledRef.current || !dirtyRef.current || !readyRef.current) return
     if (pushTimer.current) clearTimeout(pushTimer.current)
     setSyncStatus('syncing')
     pushTimer.current = setTimeout(push, PUSH_DEBOUNCE_MS)
@@ -172,6 +184,7 @@ function useSubjectState(id, defaultRemaining, today) {
   }, [state, storeKey])
 
   function update(fn) {
+    versionRef.current += 1
     dirtyRef.current = true
     setState(fn)
   }
