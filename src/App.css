@@ -1,0 +1,475 @@
+:root {
+  --paper: #f1f1ea;
+  --paper-raised: #fafaf6;
+  --ink: #1c2622;
+  --ink-soft: #5b655f;
+  --line: #d8d8cc;
+  --math: #2b5f55;
+  --math-soft: #dce9e5;
+  --la: #9a3b3b;
+  --la-soft: #f1dedc;
+  --gold: #b98a2e;
+  --gold-soft: #f1e6cc;
+  --danger: #b1442f;
+  --danger-soft: #f5ddd5;
+  --radius: 10px;
+
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-sizing: border-box;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #171b19;
+    --paper-raised: #1f2421;
+    --ink: #edefea;
+    --ink-soft: #9ba39d;
+    --line: #333b36;
+    --math: #7fc2b0;
+    --math-soft: #223a34;
+    --la: #e19a93;
+    --la-soft: #3c2523;
+    --gold: #e3b75a;
+    --gold-soft: #3a2f1a;
+    --danger: #e0806a;
+    --danger-soft: #402620;
+  }
+}
+:root[data-theme='dark'] {
+  --paper: #171b19;
+  --paper-raised: #1f2421;
+  --ink: #edefea;
+  --ink-soft: #9ba39d;
+  --line: #333b36;
+  --math: #7fc2b0;
+  --math-soft: #223a34;
+  --la: #e19a93;
+  --la-soft: #3c2523;
+  --gold: #e3b75a;
+  --gold-soft: #3a2f1a;
+  --danger: #e0806a;
+  --danger-soft: #402620;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-padding-top: env(safe-area-inset-top, 0px);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter', system-ui, sans-serif;
+  padding: 28px clamp(12px, 4vw, 20px) 48px;
+  min-height: 100%;
+}
+
+.wrap {
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+header.page {
+  margin-bottom: 26px;
+}
+
+.eyebrow {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  margin: 0 0 6px;
+}
+
+h1 {
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  font-size: clamp(28px, 5vw, 38px);
+  line-height: 1.12;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+
+.sub {
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 860px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px 22px 18px;
+}
+
+@media (max-width: 480px) {
+  .panel {
+    padding: 18px 16px 16px;
+  }
+}
+
+.panel[data-subject='math'] {
+  --accent: var(--math);
+  --accent-soft: var(--math-soft);
+}
+.panel[data-subject='la'] {
+  --accent: var(--la);
+  --accent-soft: var(--la-soft);
+}
+
+.subject-name {
+  font-family: 'Fraunces', serif;
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 0 0 2px;
+}
+
+.subject-caption {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0 0 18px;
+}
+
+.stat-row {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat .num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.stat .lbl {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.stat.big .num {
+  font-size: 34px;
+  color: var(--accent);
+}
+
+.remaining-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.remaining-edit input {
+  width: 4.5ch;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  border-bottom: 1.5px dashed var(--line);
+  padding: 0 2px;
+  text-align: right;
+}
+.remaining-edit input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.progress-track {
+  height: 8px;
+  background: var(--accent-soft);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 4px 0 18px;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 6px;
+  transition: width 0.35s ease;
+}
+
+.log-title {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 4px 0 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tap-hint {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 0 0 10px;
+}
+
+table.log {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+table.log tr {
+  border-top: 1px solid var(--line);
+}
+table.log tr:first-child {
+  border-top: none;
+}
+
+table.log td {
+  padding: 7px 0;
+  vertical-align: middle;
+}
+
+td.day-label {
+  color: var(--ink);
+  width: 40%;
+}
+td.day-label .dow {
+  color: var(--ink-soft);
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+tr.is-today td.day-label {
+  font-weight: 600;
+}
+tr.is-today {
+  background: var(--accent-soft);
+  border-radius: 6px;
+}
+tr.is-today td {
+  padding-left: 6px;
+}
+
+td.day-input {
+  width: 34%;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.count-display {
+  min-width: 2.4ch;
+  text-align: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.step-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-family: 'Inter', sans-serif;
+  font-size: 17px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.step-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.step-btn:active {
+  transform: scale(0.94);
+}
+
+.step-btn.minus.confirming {
+  width: auto;
+  padding: 0 12px;
+  border-radius: 15px;
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+}
+
+.step-btn.plus.today {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper-raised);
+  font-size: 22px;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
+}
+.step-btn.plus.today:hover {
+  opacity: 0.9;
+  color: var(--paper-raised);
+}
+.step-btn.plus.today:active {
+  transform: scale(0.94);
+}
+
+td.day-status {
+  width: 26%;
+  text-align: right;
+  font-size: 12px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+td.day-status.met {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.panel-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.panel-footer strong {
+  color: var(--ink);
+}
+
+.footer-note {
+  margin-top: 24px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  max-width: 70ch;
+  line-height: 1.6;
+}
+
+.reset-link {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+.reset-link:hover {
+  color: var(--ink);
+}
+
+.combined {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.combined strong {
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ---- Phone layout: stack each log row into label+status, then a
+   full-width, centered stepper underneath, instead of squeezing three
+   columns into a narrow table row. This is the layout she'll mostly be
+   tapping on, so it gets the most room. ---- */
+@media (max-width: 480px) {
+  .stat-row {
+    row-gap: 10px;
+  }
+
+  .panel-header {
+    align-items: center;
+  }
+
+  table.log,
+  table.log tbody {
+    display: block;
+    width: 100%;
+  }
+
+  table.log tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 12px 4px;
+  }
+
+  table.log td {
+    display: block;
+    padding: 0;
+  }
+
+  td.day-label {
+    width: auto;
+    flex: 1 1 auto;
+    font-size: 15px;
+  }
+
+  td.day-status {
+    width: auto;
+    flex: 0 0 auto;
+    order: 2;
+    font-size: 12.5px;
+  }
+
+  td.day-input {
+    width: 100%;
+    order: 3;
+    margin-top: 10px;
+  }
+
+  td.day-input .stepper {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+  }
+
+  tr.is-today {
+    padding: 14px 8px;
+  }
+}
