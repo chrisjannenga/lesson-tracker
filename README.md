@@ -59,5 +59,34 @@ these two lines and the `defaultRemaining` props passed to each
 - The **daily log** lets you tap `+` each time a lesson is finished. Tapping
   `−` requires a second confirming tap within ~2.5 seconds before it
   actually removes one, so an accidental tap won't undo progress.
-- Everything is saved in the browser's `localStorage`, per browser/device —
-  it isn't synced anywhere.
+- Everything is shared across devices through Supabase (see below), so
+  a tap on the tablet shows up on the laptop too. Each device also keeps a
+  copy in `localStorage`, so the app opens instantly and keeps working
+  offline; changes made offline are sent once the device reconnects. The
+  line under the page intro shows whether it's synced.
+
+## Sharing counts across devices (Supabase)
+
+1. Create a free project at [supabase.com](https://supabase.com/dashboard).
+2. In the project's **SQL Editor**, run
+   `supabase/migrations/20260924000000_subject_state.sql`. It creates the
+   `subject_state` table (one row per subject) and turns on live updates.
+3. From **Project Settings → API Keys**, copy the project URL and the
+   publishable key into these environment variables (locally in a `.env`
+   file, see `.env.example`, and in Vercel under **Settings → Environment
+   Variables**):
+
+   ```
+   VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+   ```
+
+4. Redeploy. The first device to open the app uploads its current counts;
+   every device after that loads them from Supabase.
+
+If those variables aren't set, the app falls back to saving in that one
+browser's `localStorage` only, like before.
+
+There's no login, so anyone who has the site's URL can change the counts.
+If two devices change the same subject at the same moment, the last save
+wins.
