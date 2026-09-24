@@ -109,6 +109,35 @@ h1 {
   max-width: 60ch;
 }
 
+.sync-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sync-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.sync-status.synced::before {
+  background: var(--math);
+}
+
+.sync-status.syncing::before {
+  background: var(--gold);
+}
+
+.sync-status.offline::before {
+  background: var(--danger);
+}
+
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

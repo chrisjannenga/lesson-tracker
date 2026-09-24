@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
+import { fetchRemote, NotConfigured, pushRemote } from './sync'
 
 // ---- Edit these two lines any time the month or dates change ----
 const START_DATE = new Date(2026, 8, 24) // Sept 24, 2026
@@ -64,8 +65,7 @@ function sumLog(log) {
   return Object.values(log).reduce((a, b) => a + (b || 0), 0)
 }
 
-function useSubjectState(id, defaultRemaining, today) {
-  const storeKey = `ixlTracker_${id}_v1`
+function initialSubjectState(storeKey, defaultRemaining, today) {
   const initial = loadState(storeKey, {
     remaining: defaultRemaining,
     log: {},
@@ -79,15 +79,117 @@ function useSubjectState(id, defaultRemaining, today) {
     initial.dailyGoal = dLeft > 0 ? Math.ceil(initial.remaining / dLeft) : 0
     initial.lastSyncedLogTotal = sumLog(initial.log)
   }
+  return initial
+}
 
-  const [remaining, setRemainingRaw] = useState(initial.remaining)
-  const [log, setLog] = useState(initial.log)
-  const [dailyGoal, setDailyGoal] = useState(initial.dailyGoal)
-  const [lastSyncedLogTotal, setLastSyncedLogTotal] = useState(initial.lastSyncedLogTotal)
+const SYNC_POLL_MS = 15000
+const PUSH_DEBOUNCE_MS = 400
+
+function useSubjectState(id, defaultRemaining, today) {
+  const storeKey = `ixlTracker_${id}_v1`
+  const [state, setState] = useState(() => initialSubjectState(storeKey, defaultRemaining, today))
+  const [syncStatus, setSyncStatus] = useState('syncing')
+
+  // stateRef mirrors the latest state for async callbacks. dirtyRef is true
+  // while this device has changes the server hasn't confirmed yet; while it's
+  // set, local changes win over whatever the server sends. enabledRef goes
+  // false if there's no shared storage, leaving localStorage only.
+  const stateRef = useRef(state)
+  const dirtyRef = useRef(false)
+  const readyRef = useRef(false)
+  const enabledRef = useRef(true)
+  const versionRef = useRef(0)
+  const pushTimer = useRef(null)
+
+  stateRef.current = state
+
+  function handleSyncError(err) {
+    if (err instanceof NotConfigured) {
+      enabledRef.current = false
+      setSyncStatus('local')
+    } else {
+      setSyncStatus('offline')
+    }
+  }
+
+  function applyRemote(remote) {
+    if (dirtyRef.current) return
+    stateRef.current = remote
+    setState(remote)
+  }
+
+  async function push() {
+    const sent = stateRef.current
+    try {
+      await pushRemote(id, sent)
+      if (stateRef.current === sent) dirtyRef.current = false
+      readyRef.current = true
+      setSyncStatus('synced')
+    } catch (err) {
+      handleSyncError(err)
+    }
+  }
+
+  // Reconcile with the server: send pending local changes, otherwise take
+  // the server's copy (or seed it from this device if it has none yet).
+  async function sync() {
+    if (!enabledRef.current) return
+    if (dirtyRef.current) return push()
+    const version = versionRef.current
+    try {
+      const remote = await fetchRemote(id)
+      // A tap may have landed while the fetch was in flight. If it's still
+      // unsent, push it; if it was already sent, this copy is stale - skip it.
+      if (versionRef.current !== version && !dirtyRef.current) return
+      if (remote && !dirtyRef.current) {
+        applyRemote(remote)
+        readyRef.current = true
+        setSyncStatus('synced')
+      } else {
+        await push()
+      }
+    } catch (err) {
+      handleSyncError(err)
+    }
+  }
 
   useEffect(() => {
-    saveState(storeKey, { remaining, log, dailyGoal, lastSyncedLogTotal })
-  }, [remaining, log, dailyGoal, lastSyncedLogTotal, storeKey])
+    sync()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') sync()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('online', sync)
+    window.addEventListener('focus', sync)
+    const poll = setInterval(sync, SYNC_POLL_MS)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('online', sync)
+      window.removeEventListener('focus', sync)
+      clearInterval(poll)
+      if (pushTimer.current) clearTimeout(pushTimer.current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  useEffect(() => {
+    saveState(storeKey, state)
+    // Hold off until the first sync so a stale local copy can't clobber the
+    // server; sync() will push anything still dirty once it connects.
+    if (!enabledRef.current || !dirtyRef.current || !readyRef.current) return
+    if (pushTimer.current) clearTimeout(pushTimer.current)
+    setSyncStatus('syncing')
+    pushTimer.current = setTimeout(push, PUSH_DEBOUNCE_MS)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, storeKey])
+
+  function update(fn) {
+    versionRef.current += 1
+    dirtyRef.current = true
+    setState(fn)
+  }
+
+  const { remaining, log, dailyGoal, lastSyncedLogTotal } = state
 
   // A manual retype of "remaining" is a fresh resync from the real IXL
   // count: recompute the goal immediately and don't let log history
@@ -95,41 +197,68 @@ function useSubjectState(id, defaultRemaining, today) {
   function setRemaining(value) {
     const v = Math.max(0, value || 0)
     const dLeft = daysLeftFrom(today)
-    setRemainingRaw(v)
-    setDailyGoal(dLeft > 0 ? Math.ceil(v / dLeft) : 0)
-    setLastSyncedLogTotal(sumLog(log))
+    update((prev) => ({
+      ...prev,
+      remaining: v,
+      dailyGoal: dLeft > 0 ? Math.ceil(v / dLeft) : 0,
+      lastSyncedLogTotal: sumLog(prev.log),
+    }))
   }
 
   function setCount(key, value) {
     const v = Math.max(0, value || 0)
-    setLog((prev) => {
-      const next = { ...prev }
+    update((prev) => {
+      const next = { ...prev.log }
       if (v === 0) delete next[key]
       else next[key] = v
-      return next
+      return { ...prev, log: next }
     })
   }
 
   function resetLog() {
-    setLog({})
-    setLastSyncedLogTotal(0)
+    update((prev) => ({ ...prev, log: {}, lastSyncedLogTotal: 0 }))
   }
 
   function recount() {
-    const loggedTotal = sumLog(log)
-    const increment = loggedTotal - lastSyncedLogTotal
-    const newRemaining = Math.max(0, remaining - increment)
     const dLeft = daysLeftFrom(today)
-    setRemainingRaw(newRemaining)
-    setDailyGoal(dLeft > 0 ? Math.ceil(newRemaining / dLeft) : 0)
-    setLastSyncedLogTotal(loggedTotal)
+    update((prev) => {
+      const loggedTotal = sumLog(prev.log)
+      const increment = loggedTotal - prev.lastSyncedLogTotal
+      const newRemaining = Math.max(0, prev.remaining - increment)
+      return {
+        ...prev,
+        remaining: newRemaining,
+        dailyGoal: dLeft > 0 ? Math.ceil(newRemaining / dLeft) : 0,
+        lastSyncedLogTotal: loggedTotal,
+      }
+    })
   }
 
-  return { remaining, setRemaining, log, setCount, resetLog, dailyGoal, recount }
+  return {
+    remaining,
+    setRemaining,
+    log,
+    setCount,
+    resetLog,
+    dailyGoal,
+    lastSyncedLogTotal,
+    recount,
+    syncStatus,
+  }
 }
 
-function SubjectPanel({ id, name, caption, defaultRemaining, today, dLeft, onRemainingChange, onGoalChange }) {
-  const { remaining, setRemaining, log, setCount, resetLog, dailyGoal, recount } = useSubjectState(
+function SubjectPanel({
+  id,
+  name,
+  caption,
+  defaultRemaining,
+  today,
+  dLeft,
+  onRemainingChange,
+  onGoalChange,
+  onSyncStatusChange,
+}) {
+  const { remaining, setRemaining, log, setCount, resetLog, dailyGoal, recount, syncStatus } = useSubjectState(
     id,
     defaultRemaining,
     today
@@ -143,6 +272,11 @@ function SubjectPanel({ id, name, caption, defaultRemaining, today, dLeft, onRem
     onGoalChange(id, dailyGoal)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remaining, dailyGoal])
+
+  useEffect(() => {
+    onSyncStatusChange(id, syncStatus)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncStatus])
 
   useEffect(() => {
     return () => {
@@ -314,6 +448,7 @@ export default function App() {
   const dLeft = daysLeftFrom(today)
   const [remainings, setRemainings] = useState({ math: 69, la: 58 })
   const [goals, setGoals] = useState({ math: 0, la: 0 })
+  const [syncStatuses, setSyncStatuses] = useState({})
 
   function handleRemainingChange(id, val) {
     setRemainings((prev) => ({ ...prev, [id]: val }))
@@ -322,6 +457,25 @@ export default function App() {
   function handleGoalChange(id, val) {
     setGoals((prev) => ({ ...prev, [id]: val }))
   }
+
+  function handleSyncStatusChange(id, val) {
+    setSyncStatuses((prev) => ({ ...prev, [id]: val }))
+  }
+
+  const statuses = Object.values(syncStatuses)
+  const syncStatus = statuses.includes('offline')
+    ? 'offline'
+    : statuses.includes('syncing')
+      ? 'syncing'
+      : statuses.includes('local')
+        ? 'local'
+        : 'synced'
+  const syncLabel = {
+    synced: 'Synced across devices',
+    syncing: 'Syncing\u2026',
+    offline: 'Offline \u2014 saved on this device, will sync when back online',
+    local: 'Saved on this device only',
+  }[syncStatus]
 
   const total = remainings.math + remainings.la
   const combinedTarget = goals.math + goals.la
@@ -338,6 +492,7 @@ export default function App() {
           Unique lessons remaining in each skill plan, and how many need to happen each day to
           finish by the end of the month.
         </p>
+        <p className={'sync-status ' + syncStatus}>{syncLabel}</p>
       </header>
 
       <div className="grid">
@@ -350,6 +505,7 @@ export default function App() {
           dLeft={dLeft}
           onRemainingChange={handleRemainingChange}
           onGoalChange={handleGoalChange}
+          onSyncStatusChange={handleSyncStatusChange}
         />
         <SubjectPanel
           id="la"
@@ -360,6 +516,7 @@ export default function App() {
           dLeft={dLeft}
           onRemainingChange={handleRemainingChange}
           onGoalChange={handleGoalChange}
+          onSyncStatusChange={handleSyncStatusChange}
         />
       </div>
 
